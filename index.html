@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Трекер команды</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0C0E11; --bg2:#1B1D22; --line:rgba(253,251,244,.09); --line2:rgba(253,251,244,.16);
+  --ink:#FDFBF4; --mute:rgba(253,251,244,.56); --faint:rgba(253,251,244,.32);
+  --cobalt:#2237E8; --lime:#C6F53C; --hot:#FF7A59;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg);color:var(--ink);font-family:"Golos Text",system-ui,sans-serif;font-size:15px;line-height:1.4}
+body{min-height:100vh;background:linear-gradient(180deg,#1B1D22 0,#0C0E11 320px) fixed}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+.app{max-width:480px;margin:0 auto;padding:18px 16px 110px}
+
+/* header */
+.top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:22px}
+.top small{color:var(--mute);font-size:13px}
+.h1{font-size:36px;font-weight:800;letter-spacing:-.03em;line-height:.95;margin-top:6px}
+.week{font-size:13px;color:var(--mute);text-align:right;white-space:nowrap;flex:none;padding-left:10px}
+.week b{display:block;color:var(--lime);font-size:22px;font-weight:700;letter-spacing:-.02em}
+
+/* people */
+.person{border-top:1px solid var(--line);padding:16px 0}
+.p-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.ava{width:38px;height:38px;border-radius:10px;background:var(--bg2);border:1px solid var(--line2);display:grid;place-items:center;font-weight:700;font-size:14px;flex:none}
+.ava.me{background:var(--cobalt);border-color:var(--cobalt)}
+.p-name{font-weight:600}
+.p-role{font-size:13px;color:var(--mute)}
+.p-count{margin-left:auto;text-align:right;font-size:13px;color:var(--mute)}
+.p-count b{color:var(--ink);font-size:18px;display:block;line-height:1}
+.p-count .hot{color:var(--hot)}
+.tline{display:flex;gap:10px;align-items:baseline;padding:5px 0 5px 50px;font-size:14px}
+.tline .d{margin-left:auto;color:var(--faint);font-size:12px;white-space:nowrap}
+.tline .d.late{color:var(--hot)}
+.proj{font-size:11px;color:var(--mute);border:1px solid var(--line2);border-radius:6px;padding:1px 6px;white-space:nowrap}
+
+/* my tasks */
+.group{margin-top:22px}
+.g-title{font-size:13px;color:var(--mute);margin-bottom:8px;display:flex;justify-content:space-between}
+.g-title.hot{color:var(--hot)}
+.task{background:rgba(253,251,244,.035);border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start}
+.task.done .t-title{color:var(--faint);text-decoration:line-through}
+.t-body{flex:1;min-width:0}
+.t-title{font-weight:500}
+.t-meta{display:flex;gap:8px;align-items:center;margin-top:6px;font-size:12px;color:var(--mute)}
+.t-meta .late{color:var(--hot)}
+.st{flex:none;font-size:12px;font-weight:600;border-radius:8px;padding:6px 9px;border:1px solid var(--line2);white-space:nowrap}
+.st.work{color:var(--ink)}
+.st.review{background:var(--cobalt);border-color:var(--cobalt)}
+.st.done{background:var(--lime);border-color:var(--lime);color:#0C0E11}
+.hint{font-size:13px;color:var(--faint);margin-top:10px}
+
+/* gantt */
+.gantt{overflow-x:auto;margin:0 -16px;padding:0 16px;scrollbar-width:none}
+.gantt::-webkit-scrollbar{display:none}
+.g-grid{position:relative;padding-left:92px}
+.g-months{display:flex;height:28px;align-items:center;font-size:12px;color:var(--mute)}
+.g-months div{border-left:1px solid var(--line);padding-left:6px;height:100%;display:flex;align-items:center}
+.g-row{display:flex;align-items:center;min-height:46px;border-top:1px solid var(--line);position:relative}
+.g-label{position:absolute;left:-92px;width:84px;font-size:13px;font-weight:600;background:var(--bg);padding-right:6px}
+.g-label span{display:block;font-weight:400;color:var(--faint);font-size:11px}
+.g-track{position:relative;height:46px;flex:1}
+.bar{position:absolute;height:22px;top:12px;border-radius:6px;font-size:11px;font-weight:600;padding:0 7px;display:flex;align-items:center;white-space:nowrap;overflow:hidden}
+.bar.b2{top:auto}
+.today{position:absolute;top:0;bottom:0;width:2px;background:var(--lime);z-index:2}
+.today span{position:absolute;top:-22px;background:var(--bg);padding:0 4px;left:5px;font-size:11px;color:var(--lime);font-weight:600;white-space:nowrap}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.legend div{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--mute)}
+.legend i{width:10px;height:10px;border-radius:3px}
+
+/* status */
+.ritual{background:var(--cobalt);border-radius:18px;padding:18px;margin-bottom:22px}
+.ritual h3{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.ritual p{font-size:14px;opacity:.8;margin:8px 0 14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:12px 16px;font-weight:600;font-size:15px}
+.btn.lime{background:var(--lime);color:#0C0E11}
+.btn.ghost{border:1px solid var(--line2)}
+.btn.ink{background:var(--ink);color:#0C0E11}
+.btn.full{width:100%}
+.slide{aspect-ratio:16/9;background:linear-gradient(160deg,#1B1D22,#0C0E11);border:1px solid var(--line2);border-radius:12px;padding:14px 16px;margin-bottom:12px;overflow:hidden;display:flex;flex-direction:column}
+.slide .s-top{display:flex;justify-content:space-between;font-size:9px;color:var(--mute)}
+.slide h4{font-size:22px;font-weight:800;letter-spacing:-.03em;line-height:1;margin:6px 0 8px}
+.slide h4.lime{color:var(--lime)}
+.s-cols{columns:2;column-gap:14px;font-size:8.5px;line-height:1.35;flex:1}
+.s-p{break-inside:avoid;margin-bottom:5px}
+.s-p b{display:block;font-size:9px}
+.s-p div{color:var(--mute)}
+.s-cap{font-size:12px;color:var(--mute);margin:14px 0 8px}
+
+/* nav */
+.nav{position:fixed;left:0;right:0;bottom:0;background:rgba(12,14,17,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+.nav-in{max-width:480px;margin:0 auto;display:flex;align-items:center;gap:4px}
+.nav button.tab{flex:1;padding:8px 0;font-size:12px;color:var(--mute);border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.nav button.tab svg{width:22px;height:22px}
+.nav button.tab.on{color:var(--ink)}
+.nav button.tab.on svg{color:var(--lime)}
+.nav .plus{width:52px;height:52px;border-radius:16px;background:var(--lime);color:#0C0E11;font-size:28px;font-weight:500;flex:none;margin:0 4px}
+
+/* sheet */
+.veil{position:fixed;inset:0;background:rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .2s;z-index:10}
+.veil.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;background:#15171C;border-top:1px solid var(--line2);border-radius:22px 22px 0 0;padding:10px 16px calc(20px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .28s cubic-bezier(.2,.8,.2,1);z-index:11;max-height:88vh;overflow-y:auto}
+.sheet.on{transform:none}
+.grip{width:40px;height:4px;border-radius:2px;background:var(--line2);margin:0 auto 14px}
+.sheet h3{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px}
+.sheet .sub{font-size:14px;color:var(--mute);margin-bottom:14px}
+textarea,input{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:12px;color:var(--ink);font:inherit;padding:12px;resize:none}
+.parsed{margin:14px 0;border:1px solid var(--line);border-radius:14px}
+.parsed div{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--line);font-size:14px}
+.parsed div:first-child{border-top:0}
+.parsed span{color:var(--mute)}
+.parsed .miss{color:var(--hot)}
+.row{display:flex;gap:8px;margin-top:12px}
+.row .btn{flex:1}
+
+/* chat */
+.chat{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.msg{max-width:86%;padding:10px 12px;border-radius:14px;font-size:14px;animation:pop .22s ease-out}
+.msg.bot{background:var(--bg2);border:1px solid var(--line);border-bottom-left-radius:4px}
+.msg.me{align-self:flex-end;background:var(--cobalt);border-bottom-right-radius:4px}
+.msg ul{margin:6px 0 0 16px}
+.msg li{margin:2px 0}
+@keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.toast{position:fixed;left:50%;bottom:100px;transform:translate(-50%,20px);background:var(--ink);color:#0C0E11;font-weight:600;font-size:14px;padding:10px 16px;border-radius:12px;opacity:0;transition:.25s;z-index:20;max-width:90vw;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.state{min-height:70vh;display:flex;flex-direction:column;justify-content:center;gap:12px}
+.state h2{font-size:30px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.state p{color:var(--mute)}
+.refresh{width:34px;height:34px;border-radius:10px;border:1px solid var(--line2);display:grid;place-items:center;margin-left:auto;color:var(--mute)}
+.refresh svg{width:18px;height:18px}
+.refresh.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{color:var(--faint);font-size:14px;padding:18px 0}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<nav class="nav"><div class="nav-in">
+  <button class="tab on" data-v="team"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="7" height="7" rx="2"/><rect x="14" y="4" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Команда</button>
+  <button class="tab" data-v="mine"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h11M4 12h11M4 17h7"/><path d="m16 16 2 2 4-4"/></svg>Мои</button>
+  <button class="plus" id="plus" aria-label="Новая задача">+</button>
+  <button class="tab" data-v="gantt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h9M7 12h11M10 18h9"/></svg>Гант</button>
+  <button class="tab" data-v="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8"/></svg>Статус</button>
+</div></nav>
+<div class="veil" id="veil"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"></div>
+<script>
+/* ====== ВСТАВЬ СЮДА ССЫЛКУ НА СКРИПТ (заканчивается на /exec) ====== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbwyZPPqW3eRrlcZy0opcZVEl3R3tUwawCDXIvG_hhHhbHDB428IVn7kw8uyAvQYYTU-VQ/exec';
+/* =================================================================== */
+</script>
+<script>
+/* ---------- Telegram ---------- */
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTg = !!(tg && tg.initData);
+if (inTg) { try { tg.ready(); tg.expand(); tg.setHeaderColor('#1B1D22'); tg.setBackgroundColor('#0C0E11'); } catch (e) {} }
+const buzz = (t = 'light') => { try { inTg && tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
+
+/* ---------- API ---------- */
+async function api(body) {
+  const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ init: tg.initData }, body)) });
+  return r.json();
+}
+
+/* ---------- состояние ---------- */
+let S = null, view = 'team';
+let TODAY, wkStart, wkEnd, nxStart, nxEnd;
+const PAL = ['#2237E8', '#C6F53C', '#FDFBF4', '#6C7BFF', '#8FB52A', '#FF7A59', '#9AA0AC', '#B79CFF'];
+
+const MON = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сент', 'окт', 'ноя', 'дек'];
+const MONF = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const kd = k => { if (!k) return null; const p = k.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+const fd = d => d ? `${d.getDate()} ${MON[d.getMonth()]}` : 'без срока';
+const addD = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ST = { work: 'В работе', review: 'На согласовании', done: 'Готово' };
+const NEXT = { work: 'review', review: 'done', done: 'work' };
+const late = t => t.s !== 'done' && t.due && t.due < TODAY;
+const hot = t => t.s !== 'done' && t.due && t.due <= addD(TODAY, 1);
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 2600); }
+
+function ingest(d) {
+  S = d;
+  TODAY = kd(d.today);
+  wkStart = addD(TODAY, -((TODAY.getDay() + 6) % 7));
+  wkEnd = addD(wkStart, 6); nxStart = addD(wkStart, 7); nxEnd = addD(wkStart, 13);
+  S.tasks.forEach(t => { t.due = kd(t.due); t.doneAt = kd(t.doneAt); });
+  S.projects.forEach(p => { p.from = kd(p.from); p.to = kd(p.to); });
+  S.friday.forEach(f => { f.week = kd(f.week); });
+  S.color = {};
+  S.projects.forEach(p => { S.color[p.name] = p.c; });
+  let i = 0;
+  S.tasks.forEach(t => { if (t.p && !S.color[t.p]) S.color[t.p] = PAL[(i++) % PAL.length]; });
+}
+const same = (a, b) => a && b && a.getTime() === b.getTime();
+
+/* ---------- экраны ---------- */
+const app = document.getElementById('app');
+const weekNo = () => { const d = new Date(TODAY); d.setDate(d.getDate() + 4 - (d.getDay() || 7)); const y = new Date(d.getFullYear(), 0, 1); return Math.ceil(((d - y) / 864e5 + 1) / 7); };
+function header(title) {
+  return `<div class="top"><div><small>IT-бренд работодателя</small><div class="h1">${title}</div></div>
+  <div class="week"><b>${weekNo()} неделя</b>${fd(wkStart)} – ${fd(wkEnd)}</div></div>`;
+}
+function stateScreen(title, text, btn) {
+  document.querySelector('.nav').style.display = 'none';
+  app.innerHTML = `<div class="state"><h2>${title}</h2><p>${text}</p>${btn || ''}</div>`;
+}
+
+function vTeam() {
+  let h = header('Кто чем<br>занят');
+  S.people.forEach(p => {
+    const open = S.tasks.filter(t => t.who === p.name && t.s !== 'done').sort((a, b) => (a.due || 9e15) - (b.due || 9e15));
+    const burn = open.filter(hot).length;
+    h += `<div class="person"><div class="p-head">
+      <div class="ava ${p.name === S.me ? 'me' : ''}">${esc(p.name.slice(0, 2))}</div>
+      <div><div class="p-name">${esc(p.name)}</div><div class="p-role">${esc(p.role)}</div></div>
+      <div class="p-count"><b>${open.length}</b>${burn ? `<span class="hot">горит ${burn}</span>` : 'в работе'}</div></div>`;
+    open.slice(0, 3).forEach(t => {
+      h += `<div class="tline"><span>${esc(t.t)}</span><span class="d ${late(t) ? 'late' : ''}">${late(t) ? 'просрочено' : fd(t.due)}</span></div>`;
+    });
+    if (open.length > 3) h += `<div class="tline" style="color:var(--faint)">и ещё ${open.length - 3}</div>`;
+    if (!open.length) h += `<div class="tline" style="color:var(--faint)">Открытых задач нет</div>`;
+    h += `</div>`;
+  });
+  return h;
+}
+
+function taskCard(t) {
+  return `<div class="task ${t.s === 'done' ? 'done' : ''}">
+    <div class="t-body"><div class="t-title">${esc(t.t)}</div>
+    <div class="t-meta">${t.p ? `<span class="proj">${esc(t.p)}</span>` : ''}<span class="${late(t) ? 'late' : ''}">${late(t) ? 'просрочено, ' : 'до '}${fd(t.due)}</span></div></div>
+    <button class="st ${t.s}" data-id="${esc(t.id)}" aria-label="Сменить статус">${ST[t.s]}</button></div>`;
+}
+function vMine() {
+  const mine = S.tasks.filter(t => t.who === S.me);
+  const groups = [
+    ['Горит', mine.filter(hot), 'hot'],
+    ['На этой неделе', mine.filter(t => t.s !== 'done' && !hot(t) && t.due && t.due <= wkEnd)],
+    ['Дальше', mine.filter(t => t.s !== 'done' && (!t.due || t.due > wkEnd))],
+    ['Готово за неделю', mine.filter(t => t.s === 'done' && t.doneAt && t.doneAt >= wkStart)],
+  ];
+  let h = header('Мои<br>задачи'), any = false;
+  groups.forEach(([name, list, cls]) => {
+    if (!list.length) return;
+    any = true;
+    h += `<div class="group"><div class="g-title ${cls || ''}"><span>${name}</span><span>${list.length}</span></div>${list.sort((a, b) => (a.due || 9e15) - (b.due || 9e15)).map(taskCard).join('')}</div>`;
+  });
+  h += any ? `<p class="hint">Нажми на статус, чтобы передвинуть задачу дальше.</p>`
+    : `<p class="empty">Задач пока нет. Нажми «+» или напиши в чате: #задача ${esc(S.me)}, что сделать, к какому сроку.</p>`;
+  return h;
+}
+
+function vGantt() {
+  const start = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+  let end = new Date(TODAY.getFullYear(), 11, 31);
+  if ((end - start) / 864e5 < 90) end = addD(start, 120);
+  const px = 4, W = Math.round((end - start) / 864e5 + 1) * px;
+  const x = d => Math.round((Math.min(Math.max(d, start), addD(end, 1)) - start) / 864e5) * px;
+  let months = '';
+  for (let m = new Date(start); m <= end; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+    const n = new Date(m.getFullYear(), m.getMonth() + 1, 1);
+    months += `<div style="width:${x(n) - x(m)}px">${MONF[m.getMonth()]}</div>`;
+  }
+  const list = S.projects.filter(p => p.from && p.to && p.to >= start);
+  if (!list.length) return header('Проекты') + `<p class="empty">Проектов пока нет. Их заводят в таблице, на листе «Проекты»: название, ответственный, даты начала и конца.</p>`;
+  let rows = '';
+  S.people.forEach(p => {
+    const bars = list.filter(g => g.who === p.name).sort((a, b) => a.from - b.from);
+    if (!bars.length) return;
+    const hgt = 18 + bars.length * 28;
+    rows += `<div class="g-row" style="min-height:${hgt}px"><div class="g-label">${esc(p.name)}<span>${esc(p.role)}</span></div>
+      <div class="g-track" style="width:${W}px;height:${hgt}px">`;
+    bars.forEach((b, i) => {
+      const col = b.c || '#2237E8', fg = lum(col) > 150 ? '#0C0E11' : '#FDFBF4';
+      rows += `<div class="bar" style="left:${x(b.from)}px;width:${Math.max(8, x(addD(b.to, 1)) - x(b.from))}px;top:${10 + i * 28}px;background:${col};color:${fg}">${esc(b.name)}</div>`;
+    });
+    rows += `</div></div>`;
+  });
+  const names = [...new Set(list.map(p => p.name))];
+  return header('Проекты') + `
+  <div class="gantt"><div class="g-grid" style="width:${W + 92}px">
+    <div class="g-months">${months}</div>
+    <div style="position:relative">${rows}<div class="today" style="left:${x(TODAY)}px"><span>сегодня</span></div></div>
+  </div></div>
+  <div class="legend">${names.map(n => `<div><i style="background:${S.color[n]}"></i>${esc(n)}</div>`).join('')}</div>
+  <p class="hint">Листай вбок. Проекты правятся в таблице, на листе «Проекты».</p>`;
+}
+function lum(hex) { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); }
+
+function slide(title, range, by, lime) {
+  const names = S.people.map(p => p.name).filter(n => by[n] && by[n].length);
+  return `<div class="slide"><div class="s-top"><span>Статус команды</span><span>${range}</span></div>
+    <h4 class="${lime ? 'lime' : ''}">${title}</h4><div class="s-cols">${names.length ? names.map(n => `<div class="s-p"><b>${esc(n)}</b>${by[n].map(x => `<div>${esc(x)}</div>`).join('')}</div>`).join('') : '<div class="s-p"><div>Пока пусто</div></div>'}</div></div>`;
+}
+function vStatus() {
+  const done = {}, plans = {};
+  const push = (o, n, t) => (o[n] = o[n] || []).push(t);
+  S.tasks.forEach(t => {
+    if (t.s === 'done' && t.doneAt && t.doneAt >= wkStart && t.doneAt <= wkEnd) push(done, t.who, t.t);
+    if (t.s !== 'done' && t.due && t.due <= nxEnd) push(plans, t.who, t.t);
+  });
+  S.friday.forEach(f => {
+    if (f.type === 'сделано' && same(f.week, wkStart)) push(done, f.who, f.t);
+    if (f.type === 'план' && same(f.week, nxStart)) push(plans, f.who, f.t);
+  });
+  return header('Статус<br>недели') + `
+  <div class="ritual"><h3>Пятничный сбор</h3>
+    <p>В пятницу в 16:00 бот пишет каждому в личку: вот что закрыто, какие планы? Ответы попадают в слайды. В понедельник в 9:00 готовая презентация приходит админам.</p></div>
+  <div class="s-cap">Черновик слайдов на сейчас</div>
+  ${slide('Сделано за неделю', `${fd(wkStart)} – ${fd(wkEnd)}`, done, true)}
+  ${slide('Планы на следующую', `${fd(nxStart)} – ${fd(nxEnd)}`, plans, false)}
+  <button class="btn ink full" id="export" style="margin-top:6px">Собрать Google Слайды сейчас</button>
+  <p class="hint">Соберётся новая презентация на твоём Google Диске: сделано, планы и Гант.</p>`;
+}
+
+function render() {
+  app.innerHTML = { team: vTeam, mine: vMine, gantt: vGantt, status: vStatus }[view]();
+}
+
+/* ---------- загрузка ---------- */
+async function load(silent) {
+  if (!silent) stateScreenLoading();
+  try {
+    const d = await api({ a: 'data' });
+    if (!d.ok) {
+      if (d.error === 'auth') return stateScreen('Переоткрой трекер', 'Сессия устарела. Закрой трекер и открой его снова из Телеграма.');
+      if (d.error === 'unknown') return stateScreen('Тебя нет в списке', `Передай админу трекера свой Telegram ID: <b style="color:var(--ink)">${d.id}</b>. Его нужно вписать в таблицу, на лист «Люди».`);
+      return stateScreen('Что-то сломалось', 'Скрипт ответил ошибкой: ' + esc(d.error || 'неизвестно') + '. Посмотри журнал выполнений в Apps Script.');
+    }
+    ingest(d);
+    document.querySelector('.nav').style.display = '';
+    render();
+  } catch (e) {
+    stateScreen('Не достучался до таблицы', 'Проверь, что в файле index.html стоит правильная ссылка на скрипт и что он опубликован с доступом «Все».',
+      '<button class="btn lime" onclick="load()">Попробовать ещё раз</button>');
+  }
+}
+function stateScreenLoading() { stateScreen('Загружаю задачи', 'Секунду, забираю свежие данные из таблицы.'); }
+
+/* ---------- события ---------- */
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  if (!S) return;
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
+  view = b.dataset.v; buzz(); render(); window.scrollTo(0, 0);
+  load(true);
+});
+app.addEventListener('click', async e => {
+  const st = e.target.closest('.st');
+  if (st) {
+    const t = S.tasks.find(x => String(x.id) === st.dataset.id);
+    const prev = t.s;
+    t.s = NEXT[t.s]; t.doneAt = t.s === 'done' ? new Date(TODAY) : null;
+    buzz(t.s === 'done' ? 'medium' : 'light'); render();
+    const r = await api({ a: 'status', id: t.id, s: t.s }).catch(() => ({ ok: false }));
+    if (!r.ok) { t.s = prev; render(); toast('Не сохранилось. Попробуй ещё раз'); }
+    else if (t.s === 'done') toast('Готово. Попадёт в пятничный статус');
+    return;
+  }
+  if (e.target.id === 'export') {
+    const b = e.target; b.disabled = true; b.textContent = 'Собираю, это около минуты…'; buzz();
+    const r = await api({ a: 'slides' }).catch(() => ({ ok: false }));
+    b.disabled = false; b.textContent = 'Собрать Google Слайды сейчас';
+    if (r.ok) { toast('Слайды готовы'); inTg ? tg.openLink(r.url) : window.open(r.url); }
+    else toast('Не получилось собрать слайды');
+  }
+});
+
+/* ---------- шторка: новая задача ---------- */
+const sheet = document.getElementById('sheet'), veil = document.getElementById('veil');
+function openSheet(html) { sheet.innerHTML = '<div class="grip"></div>' + html; sheet.classList.add('on'); veil.classList.add('on'); }
+function closeSheet() { sheet.classList.remove('on'); veil.classList.remove('on'); }
+veil.onclick = closeSheet;
+
+document.getElementById('plus').onclick = () => {
+  if (!S) return;
+  buzz();
+  openSheet(`<h3>Новая задача</h3><p class="sub">Кто, что и к какому сроку. Задача появится в таблице и в общем чате.</p>
+    <textarea id="tin" rows="3" placeholder="Лена, пост про Сбер.Среду к пятнице"></textarea>
+    <p class="hint" id="terr" style="color:var(--hot)"></p>
+    <div class="row"><button class="btn lime" id="padd">Добавить</button></div>`);
+  const btn = document.getElementById('padd');
+  btn.onclick = async () => {
+    const text = document.getElementById('tin').value.trim();
+    if (!text) return;
+    btn.disabled = true; btn.textContent = 'Записываю…';
+    const r = await api({ a: 'add', text }).catch(() => ({ ok: false }));
+    btn.disabled = false; btn.textContent = 'Добавить';
+    if (r.ok) { buzz('medium'); closeSheet(); toast(`Записал: ${r.task.who}, до ${fd(kd(r.task.due))}`); load(true); }
+    else if (r.error === 'missing') document.getElementById('terr').textContent = 'Не понял ' + r.missing.join(' и ') + '. Например: «Лена, пост про Среду к пятнице».';
+    else document.getElementById('terr').textContent = 'Не сохранилось. Попробуй ещё раз.';
+  };
+};
+
+/* ---------- старт ---------- */
+if (!inTg) stateScreen('Открой через бота', 'Трекер работает внутри Телеграма: зайди в чат с ботом и нажми кнопку слева от поля ввода.');
+else if (!API_URL || API_URL.indexOf('http') !== 0) stateScreen('Осталось вставить ссылку', 'Открой index.html и впиши в API_URL ссылку на опубликованный скрипт.');
+else load();
+
+</script>
+</body>
+</html>
