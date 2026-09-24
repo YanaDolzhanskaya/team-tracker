@@ -463,18 +463,35 @@ document.getElementById('plus').onclick = () => {
     <p class="hint" id="terr" style="color:var(--hot)"></p>
     <div class="row"><button class="btn lime" id="padd">Добавить</button></div>`);
   const btn = document.getElementById('padd');
-  btn.onclick = async () => {
+  const add = async (force) => {
     const text = document.getElementById('tin').value.trim();
     if (!text) return;
     btn.disabled = true; btn.textContent = 'Записываю…';
-    const r = await api({ a: 'add', text }).catch(() => ({ ok: false }));
+    const r = await api({ a: 'add', text, force: force ? 1 : 0 }).catch(() => ({ ok: false }));
     btn.disabled = false; btn.textContent = 'Добавить';
     if (r.ok) { buzz('medium'); closeSheet(); toast(`Записал: ${r.task.who}, до ${fd(kd(r.task.due))}`); load(true); }
+    else if (r.error === 'similar') {
+      const sm = r.similar, self = sm.who === S.me;
+      document.getElementById('terr').innerHTML = `<span style="color:var(--ink)">${self ? 'У тебя уже есть' : esc(sm.who) + ' уже ведёт'} похожую задачу: <b>${esc(sm.t)}</b>, до ${fd(kd(sm.due))}.</span>
+        <span class="row" style="margin-top:10px;display:flex;gap:8px">${self ? '' : '<button class="btn ghost" id="srem" style="color:var(--ink)">Напомнить о ней</button>'}<button class="btn ghost" id="snew" style="color:var(--ink)">Всё равно поставить</button></span>`;
+      document.getElementById('snew').onclick = () => add(true);
+      const sr = document.getElementById('srem');
+      if (sr) sr.onclick = async () => {
+        sr.disabled = true;
+        const x = await api({ a: 'remind', id: sm.id }).catch(() => ({ ok: false }));
+        closeSheet(); toast(remindMsg(x, sm.who));
+      };
+    }
     else if (r.error === 'duplicate') document.getElementById('terr').textContent = 'Такая задача у этого человека уже есть, второй раз не записываю.';
     else if (r.error === 'missing') document.getElementById('terr').textContent = 'Не понял ' + r.missing.join(' и ') + '. Например: «Лена, РК для ODO, пятница».';
     else document.getElementById('terr').textContent = 'Не сохранилось. Попробуй ещё раз.';
   };
+  btn.onclick = () => add(false);
 };
+function remindMsg(x, who) {
+  if (x.ok) return x.queued ? 'Напоминание уйдёт в 9:00 рабочего дня' : 'Напоминание отправлено';
+  return x.error === 'already' ? 'Сегодня уже напоминали' : x.error === 'notg' ? `${who} ещё не нажимал(а) Start у бота` : 'Не получилось напомнить';
+}
 
 /* ---------- отпуска ---------- */
 const ABS = { 'отпуск': '#C6F53C', 'удалёнка': '#6C7BFF', 'дэйофф': '#FDFBF4', 'AFK': '#9AA0AC', 'ДР': '#FF7A59' };
@@ -625,6 +642,7 @@ function openTask(id) {
     <p class="hint" id="slh" style="margin-top:-6px"></p>
     <p class="hint" id="derr" style="color:var(--hot)"></p>
     <div class="row" id="drow"><button class="btn ghost" id="del" style="color:var(--hot);border-color:var(--hot)">Удалить задачу</button></div>`);
+
   const slh = () => { document.getElementById('slh').textContent = !t.slide ? (t.p ? 'Сейчас идёт на слайд: у задачи есть проект.' : 'Сейчас не идёт на слайд: у задачи нет проекта.') : (t.slide === 'да' ? 'Всегда на слайде.' : 'На слайды не выносится.'); };
   slh();
   document.getElementById('tp').onchange = async e => {
