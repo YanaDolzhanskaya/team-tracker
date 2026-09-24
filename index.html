@@ -141,6 +141,20 @@ textarea,input{width:100%;background:var(--bg);border:1px solid var(--line2);bor
 .refresh.spin svg{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .empty{color:var(--faint);font-size:14px;padding:18px 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
+.chip{border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:14px}
+.chip.on{background:var(--lime);border-color:var(--lime);color:#0C0E11;font-weight:600}
+.flabel{font-size:13px;color:var(--mute);margin:10px 0 6px}
+.dates{display:flex;gap:8px}
+input[type=date],select{color-scheme:dark;width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:12px;color:var(--ink);font:inherit;padding:12px}
+.vband{position:relative;height:8px;margin-bottom:4px}
+.vband i{position:absolute;top:0;height:8px;border-radius:3px;background:var(--hot)}
+.vpill{position:absolute;top:13px;height:20px;border-radius:6px;font-size:11px;font-weight:600;padding:0 6px;display:flex;align-items:center;white-space:nowrap;overflow:hidden;cursor:pointer}
+.away{display:inline-block;margin-top:3px;font-size:12px;color:#0C0E11;background:var(--lime);border-radius:6px;padding:1px 7px;font-weight:600}
+.vitem{display:flex;gap:10px;align-items:baseline;padding:10px 0;border-top:1px solid var(--line);cursor:pointer}
+.vitem .dot{width:10px;height:10px;border-radius:3px;flex:none;transform:translateY(1px)}
+.vitem .w{font-weight:600}
+.vitem .r{margin-left:auto;color:var(--mute);font-size:13px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -150,6 +164,7 @@ textarea,input{width:100%;background:var(--bg);border:1px solid var(--line2);bor
   <button class="tab" data-v="mine"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h11M4 12h11M4 17h7"/><path d="m16 16 2 2 4-4"/></svg>Мои</button>
   <button class="plus" id="plus" aria-label="Новая задача">+</button>
   <button class="tab" data-v="gantt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h9M7 12h11M10 18h9"/></svg>Гант</button>
+  <button class="tab" data-v="vac"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18"/><path d="M4 11a8 8 0 0 1 16 0z"/><path d="M9 21h6"/></svg>Отпуска</button>
   <button class="tab" data-v="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8"/></svg>Статус</button>
 </div></nav>
 <div class="veil" id="veil"></div>
@@ -198,6 +213,7 @@ function ingest(d) {
   S.tasks.forEach(t => { t.due = kd(t.due); t.doneAt = kd(t.doneAt); });
   S.projects.forEach(p => { p.from = kd(p.from); p.to = kd(p.to); });
   S.friday.forEach(f => { f.week = kd(f.week); });
+  S.absences = (S.absences || []).map(a => Object.assign(a, { from: kd(a.from), to: kd(a.to) })).filter(a => a.from && a.to);
   S.color = {};
   S.projects.forEach(p => { S.color[p.name] = p.c; });
   let i = 0;
@@ -224,10 +240,10 @@ function vTeam() {
     const burn = open.filter(hot).length;
     h += `<div class="person"><div class="p-head">
       <div class="ava ${p.name === S.me ? 'me' : ''}">${esc(p.name.slice(0, 2))}</div>
-      <div><div class="p-name">${esc(p.name)}</div><div class="p-role">${esc(p.role)}</div></div>
+      <div><div class="p-name">${esc(p.name)}</div><div class="p-role">${esc(p.role)}</div>${awayBadge(p.name)}</div>
       <div class="p-count"><b>${open.length}</b>${burn ? `<span class="hot">горит ${burn}</span>` : 'в работе'}</div></div>`;
     open.slice(0, 3).forEach(t => {
-      h += `<div class="tline"><span>${esc(t.t)}</span><span class="d ${late(t) ? 'late' : ''}">${late(t) ? 'просрочено' : fd(t.due)}</span></div>`;
+      h += `<div class="tline" data-open="${esc(t.id)}" style="cursor:pointer"><span>${esc(t.t)}</span><span class="d ${late(t) ? 'late' : ''}">${late(t) ? 'просрочено' : fd(t.due)}</span></div>`;
     });
     if (open.length > 3) h += `<div class="tline" style="color:var(--faint)">и ещё ${open.length - 3}</div>`;
     if (!open.length) h += `<div class="tline" style="color:var(--faint)">Открытых задач нет</div>`;
@@ -238,7 +254,7 @@ function vTeam() {
 
 function taskCard(t) {
   return `<div class="task ${t.s === 'done' ? 'done' : ''}">
-    <div class="t-body"><div class="t-title">${esc(t.t)}</div>
+    <div class="t-body" data-open="${esc(t.id)}" style="cursor:pointer"><div class="t-title">${esc(t.t)}</div>
     <div class="t-meta">${t.p ? `<span class="proj">${esc(t.p)}</span>` : ''}<span class="${late(t) ? 'late' : ''}">${late(t) ? 'просрочено, ' : 'до '}${fd(t.due)}</span></div></div>
     <button class="st ${t.s}" data-id="${esc(t.id)}" aria-label="Сменить статус">${ST[t.s]}</button></div>`;
 }
@@ -256,8 +272,8 @@ function vMine() {
     any = true;
     h += `<div class="group"><div class="g-title ${cls || ''}"><span>${name}</span><span>${list.length}</span></div>${list.sort((a, b) => (a.due || 9e15) - (b.due || 9e15)).map(taskCard).join('')}</div>`;
   });
-  h += any ? `<p class="hint">Нажми на статус, чтобы передвинуть задачу дальше.</p>`
-    : `<p class="empty">Задач пока нет. Нажми «+» или напиши в чате: #задача ${esc(S.me)}, что сделать, к какому сроку.</p>`;
+  h += any ? `<p class="hint">Нажми на статус, чтобы передвинуть задачу дальше. На саму задачу — чтобы открыть или удалить.</p>`
+    : `<p class="empty">Задач пока нет. Нажми «+» или упомяни бота в чате: кто, что и срок.</p>`;
   return h;
 }
 
@@ -314,7 +330,16 @@ function vStatus() {
     if (f.type === 'сделано' && same(f.week, wkStart)) push(done, f.who, f.t);
     if (f.type === 'план' && same(f.week, nxStart)) push(plans, f.who, f.t);
   });
-  return header('Статус<br>недели') + `
+  const nums = S.friday.filter(f => f.type === 'цифра' && same(f.week, wkStart)).map(f => {
+    const i = f.t.indexOf(' — ');
+    return { who: f.who, num: i > 0 ? f.t.slice(0, i) : f.t, text: i > 0 ? f.t.slice(i + 3) : '' };
+  });
+  const missing = S.people.map(p => p.name).filter(n => !nums.some(x => x.who === n));
+  const numsHtml = `<div class="s-cap">Цифры недели</div>
+    ${nums.length ? nums.map(n => `<div class="tline" style="padding-left:0"><span><b style="color:var(--lime);font-size:18px">${esc(n.num)}</b> ${esc(n.text)}</span><span class="d">${esc(n.who)}</span></div>`).join('') : '<p class="empty" style="padding:6px 0">Пока ни одной.</p>'}
+    ${missing.length ? `<p class="hint">Ещё нет цифры: ${missing.map(esc).join(', ')}</p>` : ''}
+    <button class="btn ghost full" id="addNum" style="margin:12px 0 20px">${nums.some(x => x.who === S.me) ? 'Поменять мою цифру' : '+ Моя цифра недели'}</button>`;
+  return header('Статус<br>недели') + numsHtml + `
   <div class="ritual"><h3>Пятничный сбор</h3>
     <p>В пятницу в 16:00 бот пишет каждому в личку: вот что закрыто, какие планы? Ответы попадают в слайды. В понедельник в 9:00 готовая презентация приходит админам.</p></div>
   <div class="s-cap">Черновик слайдов на сейчас</div>
@@ -325,7 +350,7 @@ function vStatus() {
 }
 
 function render() {
-  app.innerHTML = { team: vTeam, mine: vMine, gantt: vGantt, status: vStatus }[view]();
+  app.innerHTML = { team: vTeam, mine: vMine, gantt: vGantt, vac: vVac, status: vStatus }[view]();
 }
 
 /* ---------- загрузка ---------- */
@@ -367,6 +392,12 @@ app.addEventListener('click', async e => {
     else if (t.s === 'done') toast('Готово. Попадёт в пятничный статус');
     return;
   }
+  const va = e.target.closest('[data-abs]');
+  if (va) { openAbs(va.dataset.abs); return; }
+  if (e.target.id === 'addAbs') { openAbsForm(); return; }
+  if (e.target.id === 'addNum') { openNumForm(); return; }
+  const op = e.target.closest('[data-open]');
+  if (op) { openTask(op.dataset.open); return; }
   if (e.target.id === 'export') {
     const b = e.target; b.disabled = true; b.textContent = 'Собираю, это около минуты…'; buzz();
     const r = await api({ a: 'slides' }).catch(() => ({ ok: false }));
@@ -385,8 +416,10 @@ veil.onclick = closeSheet;
 document.getElementById('plus').onclick = () => {
   if (!S) return;
   buzz();
-  openSheet(`<h3>Новая задача</h3><p class="sub">Кто, что и к какому сроку. Задача появится в таблице и в общем чате.</p>
-    <textarea id="tin" rows="3" placeholder="Лена, пост про Сбер.Среду к пятнице"></textarea>
+  openSheet(`<h3>Новая задача</h3><p class="sub">Кто, что и срок, можно с новой строки. Без срока поставлю ближайшую пятницу.</p>
+    <textarea id="tin" rows="3" placeholder="Лена
+РК для ODO
+пятница"></textarea>
     <p class="hint" id="terr" style="color:var(--hot)"></p>
     <div class="row"><button class="btn lime" id="padd">Добавить</button></div>`);
   const btn = document.getElementById('padd');
@@ -397,10 +430,176 @@ document.getElementById('plus').onclick = () => {
     const r = await api({ a: 'add', text }).catch(() => ({ ok: false }));
     btn.disabled = false; btn.textContent = 'Добавить';
     if (r.ok) { buzz('medium'); closeSheet(); toast(`Записал: ${r.task.who}, до ${fd(kd(r.task.due))}`); load(true); }
-    else if (r.error === 'missing') document.getElementById('terr').textContent = 'Не понял ' + r.missing.join(' и ') + '. Например: «Лена, пост про Среду к пятнице».';
+    else if (r.error === 'duplicate') document.getElementById('terr').textContent = 'Такая задача у этого человека уже есть, второй раз не записываю.';
+    else if (r.error === 'missing') document.getElementById('terr').textContent = 'Не понял ' + r.missing.join(' и ') + '. Например: «Лена, РК для ODO, пятница».';
     else document.getElementById('terr').textContent = 'Не сохранилось. Попробуй ещё раз.';
   };
 };
+
+/* ---------- отпуска ---------- */
+const ABS = { 'отпуск': '#C6F53C', 'удалёнка': '#6C7BFF', 'дэйофф': '#FDFBF4', 'AFK': '#9AA0AC', 'ДР': '#FF7A59' };
+const AWAY = { 'отпуск': 1, 'дэйофф': 1, 'AFK': 1 };
+const rng = (a, b) => same(a, b) ? fd(a) : (a.getMonth() === b.getMonth() ? `${a.getDate()}–${fd(b)}` : `${fd(a)} – ${fd(b)}`);
+function awayBadge(name) {
+  const a = S.absences.find(x => x.who === name && AWAY[x.type] && x.from <= TODAY && x.to >= TODAY);
+  return a ? `<span class="away">${esc(a.type)} ${same(a.to, TODAY) ? 'сегодня' : 'до ' + fd(a.to)}</span>` : '';
+}
+function overlaps(from) {
+  const list = S.absences.filter(a => AWAY[a.type] && a.to >= from);
+  if (!list.length) return [];
+  const last = list.reduce((m, a) => a.to > m ? a.to : m, from), out = [];
+  let cur = null;
+  for (let d = new Date(from), i = 0; d <= last && i < 400; d = addD(d, 1), i++) {
+    const names = [...new Set(list.filter(a => a.from <= d && a.to >= d).map(a => a.who))].sort();
+    const k = names.length >= 2 ? names.join(', ') : '';
+    if (k && cur && cur.k === k && same(cur.to, addD(d, -1))) cur.to = new Date(d);
+    else if (k) { cur = { k, from: new Date(d), to: new Date(d) }; out.push(cur); }
+    else cur = null;
+  }
+  return out;
+}
+function vVac() {
+  const start = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+  let end = new Date(TODAY.getFullYear(), 11, 31);
+  if ((end - start) / 864e5 < 90) end = addD(start, 120);
+  const px = 4, W = Math.round((end - start) / 864e5 + 1) * px;
+  const x = d => Math.round((Math.min(Math.max(d, start), addD(end, 1)) - start) / 864e5) * px;
+  let months = '';
+  for (let m = new Date(start); m <= end; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+    const n = new Date(m.getFullYear(), m.getMonth() + 1, 1);
+    months += `<div style="width:${x(n) - x(m)}px">${MONF[m.getMonth()]}</div>`;
+  }
+  const ov = overlaps(start);
+  const band = ov.map(o => `<i style="left:${x(o.from)}px;width:${Math.max(4, x(addD(o.to, 1)) - x(o.from))}px" title="${esc(o.k)}"></i>`).join('');
+  let rows = '';
+  S.people.forEach(p => {
+    const list = S.absences.filter(a => a.who === p.name && a.to >= start);
+    rows += `<div class="g-row"><div class="g-label">${esc(p.name)}</div><div class="g-track" style="width:${W}px">`;
+    list.forEach(a => {
+      const c = ABS[a.type] || '#C6F53C', fg = lum(c) > 150 ? '#0C0E11' : '#FDFBF4', w = Math.max(10, x(addD(a.to, 1)) - x(a.from));
+      rows += `<div class="vpill" data-abs="${esc(a.id)}" style="left:${x(a.from)}px;width:${w}px;background:${c};color:${fg}">${w > 44 ? esc(a.type) : ''}</div>`;
+    });
+    rows += `</div></div>`;
+  });
+  const now = S.absences.filter(a => a.from <= TODAY && a.to >= TODAY).sort((a, b) => a.from - b.from);
+  const next = S.absences.filter(a => a.from > TODAY).sort((a, b) => a.from - b.from);
+  const item = a => `<div class="vitem" data-abs="${esc(a.id)}"><span class="dot" style="background:${ABS[a.type] || '#C6F53C'}"></span>
+    <span><span class="w">${esc(a.who)}</span> · ${esc(a.type)}${a.note ? ` <span style="color:var(--mute)">(${esc(a.note)})</span>` : ''}</span>
+    <span class="r">${a.from <= TODAY && !same(a.from, a.to) ? 'до ' + fd(a.to) : rng(a.from, a.to)}</span></div>`;
+  return header('Отпуска') + `
+  <button class="btn lime full" id="addAbs" style="margin-bottom:18px">+ Отметить отпуск или дэйофф</button>
+  <div class="gantt"><div class="g-grid" style="width:${W + 92}px">
+    <div class="g-months">${months}</div>
+    <div class="vband">${band}</div>
+    <div style="position:relative">${rows}<div class="today" style="left:${x(TODAY)}px"></div></div>
+  </div></div>
+  <div class="legend">${Object.keys(ABS).map(k => `<div><i style="background:${ABS[k]}"></i>${k}</div>`).join('')}<div><i style="background:var(--hot)"></i>пересечения</div></div>
+  ${ov.length ? `<div class="group"><div class="g-title hot"><span>Пересечения</span></div>${ov.map(o => `<div class="tline" style="padding-left:0"><span>${esc(o.k)}</span><span class="d">${rng(o.from, o.to)}</span></div>`).join('')}</div>` : ''}
+  ${now.length ? `<div class="group"><div class="g-title"><span>Сейчас</span></div>${now.map(item).join('')}</div>` : ''}
+  <div class="group"><div class="g-title"><span>Дальше</span></div>${next.length ? next.map(item).join('') : '<p class="empty">Пока ничего не запланировано.</p>'}</div>
+  <p class="hint">Боту тоже можно написать: «отпуск 12–24.10», «дэйофф 9.10», «кто в отпуске?»</p>`;
+}
+
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function openAbsForm() {
+  buzz();
+  let type = 'отпуск';
+  openSheet(`<h3>Отметить отсутствие</h3><p class="sub">Появится во вкладке «Отпуска» и на слайде в понедельник.</p>
+    ${S.admin ? `<div class="flabel">Кто</div><select id="aw">${S.people.map(p => `<option ${p.name === S.me ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>` : ''}
+    <div class="flabel">Что</div>
+    <div class="chips">${Object.keys(ABS).map(k => `<button class="chip ${k === type ? 'on' : ''}" data-t="${k}">${k}</button>`).join('')}</div>
+    <div class="dates"><div style="flex:1"><div class="flabel">С</div><input type="date" id="af" value="${iso(TODAY)}"></div>
+    <div style="flex:1"><div class="flabel">По</div><input type="date" id="at" value="${iso(TODAY)}"></div></div>
+    <div class="flabel">Комментарий, если нужен</div><input id="an" placeholder="например, кто замещает">
+    <p class="hint" id="aerr" style="color:var(--hot)"></p>
+    <div class="row"><button class="btn lime" id="asave">Сохранить</button></div>`);
+  sheet.querySelectorAll('.chip').forEach(c => c.onclick = () => { type = c.dataset.t; sheet.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === c)); buzz(); });
+  const af = document.getElementById('af'), at = document.getElementById('at');
+  af.onchange = () => { if (at.value < af.value) at.value = af.value; };
+  document.getElementById('asave').onclick = async () => {
+    const err = document.getElementById('aerr');
+    if (!af.value || !at.value || at.value < af.value) { err.textContent = 'Проверь даты: «по» не может быть раньше «с».'; return; }
+    const b = document.getElementById('asave'); b.disabled = true; b.textContent = 'Сохраняю…';
+    const aw = document.getElementById('aw');
+    const r = await api({ a: 'absAdd', type, from: af.value, to: at.value, note: document.getElementById('an').value.trim(), who: aw ? aw.value : '' }).catch(() => ({ ok: false }));
+    b.disabled = false; b.textContent = 'Сохранить';
+    if (r.ok) { buzz('medium'); closeSheet(); toast('Записал'); load(true); }
+    else err.textContent = r.error === 'duplicate' ? 'Такая запись уже есть.' : 'Не сохранилось. Попробуй ещё раз.';
+  };
+}
+
+function openAbs(id) {
+  const a = S.absences.find(x => String(x.id) === String(id));
+  if (!a) return;
+  buzz();
+  const withAway = S.absences.filter(o => o !== a && o.who !== a.who && AWAY[o.type] && AWAY[a.type] && o.from <= a.to && o.to >= a.from);
+  openSheet(`<h3>${esc(a.who)}: ${esc(a.type)}</h3>
+    <div class="parsed"><div><span>Когда</span>${rng(a.from, a.to)}</div>${a.note ? `<div><span>Комментарий</span>${esc(a.note)}</div>` : ''}
+    ${withAway.length ? `<div><span>Пересекается</span><b style="color:var(--hot);font-weight:600;text-align:right">${withAway.map(o => esc(o.who)).join(', ')}</b></div>` : ''}</div>
+    <p class="hint" id="derr" style="color:var(--hot)"></p>
+    <div class="row" id="drow"><button class="btn ghost" id="adel" style="color:var(--hot);border-color:var(--hot)">Удалить</button></div>`);
+  document.getElementById('adel').onclick = () => {
+    buzz('medium');
+    document.getElementById('drow').innerHTML = `<button class="btn ghost" id="dno">Отмена</button><button class="btn" id="dyes" style="background:var(--hot);color:#0C0E11">Да, удалить</button>`;
+    document.getElementById('dno').onclick = closeSheet;
+    document.getElementById('dyes').onclick = async () => {
+      const r = await api({ a: 'absDelete', id: a.id }).catch(() => ({ ok: false }));
+      if (r.ok) { S.absences = S.absences.filter(x => x !== a); closeSheet(); render(); toast('Удалено'); }
+      else document.getElementById('derr').textContent = r.error === 'forbidden' ? 'Удалить может сам человек, тот, кто добавил, или админ.' : 'Не получилось. Попробуй ещё раз.';
+    };
+  };
+}
+
+function openNumForm() {
+  buzz();
+  openSheet(`<h3>Цифра недели</h3><p class="sub">Одна главная цифра за неделю. Попадёт на слайд «Неделя в цифрах».</p>
+    <div class="flabel">Цифра</div><input id="nn" inputmode="decimal" placeholder="1200">
+    <div class="flabel">Что это</div><input id="nt" placeholder="регистраций на Сбер.Среду">
+    <p class="hint" id="nerr" style="color:var(--hot)"></p>
+    <div class="row"><button class="btn lime" id="nsave">Сохранить</button></div>`);
+  document.getElementById('nsave').onclick = async () => {
+    const num = document.getElementById('nn').value.trim(), text = document.getElementById('nt').value.trim();
+    if (!/\d/.test(num)) { document.getElementById('nerr').textContent = 'Впиши число.'; return; }
+    const b = document.getElementById('nsave'); b.disabled = true; b.textContent = 'Сохраняю…';
+    const r = await api({ a: 'numAdd', num, text }).catch(() => ({ ok: false }));
+    b.disabled = false; b.textContent = 'Сохранить';
+    if (r.ok) { buzz('medium'); closeSheet(); toast('Цифра записана'); load(true); }
+    else document.getElementById('nerr').textContent = 'Не сохранилось. Попробуй ещё раз.';
+  };
+}
+
+/* ---------- карточка задачи и удаление ---------- */
+function openTask(id) {
+  const t = S.tasks.find(x => String(x.id) === String(id));
+  if (!t) return;
+  buzz();
+  openSheet(`<h3>${esc(t.t)}</h3>
+    <div class="parsed">
+      <div><span>Кто</span>${esc(t.who)}</div>
+      <div><span>Срок</span>${fd(t.due)}</div>
+      <div><span>Проект</span>${t.p ? esc(t.p) : 'без проекта'}</div>
+      <div><span>Статус</span>${ST[t.s]}</div></div>
+    <p class="hint" id="derr" style="color:var(--hot)"></p>
+    <div class="row" id="drow"><button class="btn ghost" id="del" style="color:var(--hot);border-color:var(--hot)">Удалить задачу</button></div>`);
+  document.getElementById('del').onclick = () => {
+    buzz('medium');
+    document.getElementById('drow').innerHTML = `<button class="btn ghost" id="dno">Отмена</button><button class="btn" id="dyes" style="background:var(--hot);color:#0C0E11">Да, удалить</button>`;
+    document.getElementById('dno').onclick = closeSheet;
+    document.getElementById('dyes').onclick = async () => {
+      const b = document.getElementById('dyes'); b.disabled = true; b.textContent = 'Удаляю…';
+      const r = await api({ a: 'delete', id: t.id }).catch(() => ({ ok: false }));
+      if (r.ok) {
+        S.tasks = S.tasks.filter(x => x !== t);
+        closeSheet(); render(); toast('Задача удалена');
+      } else {
+        b.disabled = false; b.textContent = 'Да, удалить';
+        document.getElementById('derr').textContent = r.error === 'forbidden'
+          ? 'Удалить может исполнитель, автор задачи или админ.'
+          : r.error === 'notfound' ? 'Задачи уже нет в таблице. Обнови трекер.' : 'Не получилось удалить. Попробуй ещё раз.';
+      }
+    };
+  };
+}
 
 /* ---------- старт ---------- */
 if (!inTg) stateScreen('Открой через бота', 'Трекер работает внутри Телеграма: зайди в чат с ботом и нажми кнопку слева от поля ввода.');
