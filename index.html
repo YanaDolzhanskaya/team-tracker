@@ -141,6 +141,9 @@ textarea,input{width:100%;background:var(--bg);border:1px solid var(--line2);bor
 .refresh.spin svg{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .empty{color:var(--faint);font-size:14px;padding:18px 0}
+.back{color:var(--mute);font-size:14px;padding:4px 0;margin-bottom:6px}
+.p-head[data-person]{cursor:pointer}
+.p-head[data-person] .p-name::after{content:' ›';color:var(--faint)}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
 .chip{border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:14px}
 .chip.on{background:var(--lime);border-color:var(--lime);color:#0C0E11;font-weight:600}
@@ -240,14 +243,14 @@ function vTeam() {
   S.people.forEach(p => {
     const open = S.tasks.filter(t => t.who === p.name && t.s !== 'done').sort((a, b) => (a.due || 9e15) - (b.due || 9e15));
     const burn = open.filter(hot).length;
-    h += `<div class="person"><div class="p-head">
+    h += `<div class="person"><div class="p-head" data-person="${esc(p.name)}">
       <div class="ava ${p.name === S.me ? 'me' : ''}">${esc(p.name.slice(0, 2))}</div>
       <div><div class="p-name">${esc(p.name)}</div><div class="p-role">${esc(p.role)}</div>${awayBadge(p.name)}</div>
       <div class="p-count"><b>${open.length}</b>${burn ? `<span class="hot">горит ${burn}</span>` : 'в работе'}</div></div>`;
     open.slice(0, 3).forEach(t => {
       h += `<div class="tline" data-open="${esc(t.id)}" style="cursor:pointer"><span>${esc(t.t)}</span><span class="d ${late(t) ? 'late' : ''}">${late(t) ? 'просрочено' : fd(t.due)}</span></div>`;
     });
-    if (open.length > 3) h += `<div class="tline" style="color:var(--faint)">и ещё ${open.length - 3}</div>`;
+    if (open.length > 3) h += `<div class="tline" data-person="${esc(p.name)}" style="color:var(--faint);cursor:pointer">и ещё ${open.length - 3} ›</div>`;
     if (!open.length) h += `<div class="tline" style="color:var(--faint)">Открытых задач нет</div>`;
     h += `</div>`;
   });
@@ -259,6 +262,34 @@ function taskCard(t) {
     <div class="t-body" data-open="${esc(t.id)}" style="cursor:pointer"><div class="t-title">${esc(t.t)}</div>
     <div class="t-meta">${t.p ? `<span class="proj">${esc(t.p)}</span>` : ''}<span class="${late(t) ? 'late' : ''}">${late(t) ? 'просрочено, ' : 'до '}${fd(t.due)}</span></div></div>
     <button class="st ${t.s}" data-id="${esc(t.id)}" aria-label="Сменить статус">${ST[t.s]}</button></div>`;
+}
+function taskGroups(name) {
+  const mine = S.tasks.filter(t => t.who === name);
+  const groups = [
+    ['Горит', mine.filter(hot), 'hot'],
+    ['На этой неделе', mine.filter(t => t.s !== 'done' && !hot(t) && t.due && t.due <= wkEnd)],
+    ['Дальше', mine.filter(t => t.s !== 'done' && (!t.due || t.due > wkEnd))],
+    ['Готово за неделю', mine.filter(t => t.s === 'done' && t.doneAt && t.doneAt >= wkStart)],
+  ];
+  let h = '';
+  groups.forEach(([n, list, cls]) => {
+    if (!list.length) return;
+    h += `<div class="group"><div class="g-title ${cls || ''}"><span>${n}</span><span>${list.length}</span></div>${list.sort((a, b) => (a.due || 9e15) - (b.due || 9e15)).map(taskCard).join('')}</div>`;
+  });
+  return h;
+}
+let personView = null;
+function vPerson() {
+  const p = S.people.find(x => x.name === personView);
+  if (!p) { view = 'team'; return vTeam(); }
+  const gr = taskGroups(p.name);
+  const abs = S.absences.filter(a => a.who === p.name && a.to >= TODAY).sort((a, b) => a.from - b.from);
+  return `<button class="back" id="back">‹ Команда</button>` + header(esc(p.name)) +
+    `<div class="p-role" style="margin-top:-12px">${esc(p.role)} ${awayBadge(p.name)}</div>` +
+    (gr || `<p class="empty">Открытых задач нет.</p>`) +
+    (abs.length ? `<div class="group"><div class="g-title"><span>Отпуска и отсутствия</span></div>${abs.map(a =>
+      `<div class="vitem" data-abs="${esc(a.id)}"><span class="dot" style="background:${ABS[a.type] || '#C6F53C'}"></span><span>${esc(a.type)}</span><span class="r">${rng(a.from, a.to)}</span></div>`).join('')}</div>` : '') +
+    `<p class="hint">Нажми на статус, чтобы передвинуть задачу. На задачу — чтобы открыть или удалить.</p>`;
 }
 function vMine() {
   const mine = S.tasks.filter(t => t.who === S.me);
@@ -321,18 +352,22 @@ function slide(title, range, by, lime) {
   return `<div class="slide"><div class="s-top"><span>Статус команды</span><span>${range}</span></div>
     <h4 class="${lime ? 'lime' : ''}">${title}</h4><div class="s-cols">${names.length ? names.map(n => `<div class="s-p"><b>${esc(n)}</b>${by[n].map(x => `<div>${esc(x)}</div>`).join('')}</div>`).join('') : '<div class="s-p"><div>Пока пусто</div></div>'}</div></div>`;
 }
+const onSlide = t => t.slide === 'да' ? true : t.slide === 'нет' ? false : !!t.p;
 function vStatus() {
+  const ikn = TODAY.getDay() === 1 && new Date().getHours() < 12;
+  const W0 = ikn ? addD(wkStart, -7) : wkStart, W1 = addD(W0, 6), N0 = addD(W0, 7), N1 = addD(W0, 13);
   const done = {}, plans = {};
   const push = (o, n, t) => (o[n] = o[n] || []).push(t);
   S.tasks.forEach(t => {
-    if (t.s === 'done' && t.doneAt && t.doneAt >= wkStart && t.doneAt <= wkEnd) push(done, t.who, t.t);
-    if (t.s !== 'done' && t.due && t.due <= nxEnd) push(plans, t.who, t.t);
+    if (!onSlide(t)) return;
+    if (t.s === 'done' && t.doneAt && t.doneAt >= W0 && t.doneAt <= W1) push(done, t.who, t.t);
+    if (t.s !== 'done' && t.due && t.due <= N1) push(plans, t.who, t.t);
   });
   S.friday.forEach(f => {
-    if (f.type === 'сделано' && same(f.week, wkStart)) push(done, f.who, f.t);
-    if (f.type === 'план' && same(f.week, nxStart)) push(plans, f.who, f.t);
+    if (f.type === 'сделано' && same(f.week, W0)) push(done, f.who, f.t);
+    if (f.type === 'план' && same(f.week, N0)) push(plans, f.who, f.t);
   });
-  const nums = S.friday.filter(f => f.type === 'цифра' && same(f.week, wkStart)).map(f => {
+  const nums = S.friday.filter(f => f.type === 'цифра' && same(f.week, W0)).map(f => {
     const i = f.t.indexOf(' — ');
     return { who: f.who, num: i > 0 ? f.t.slice(0, i) : f.t, text: i > 0 ? f.t.slice(i + 3) : '' };
   });
@@ -342,17 +377,17 @@ function vStatus() {
     ${missing.length ? `<p class="hint">Ещё нет цифры: ${missing.map(esc).join(', ')}</p>` : ''}
     <button class="btn ghost full" id="addNum" style="margin:12px 0 20px">${nums.some(x => x.who === S.me) ? 'Поменять мою цифру' : '+ Моя цифра недели'}</button>`;
   return header('Статус<br>недели') + numsHtml + `
-  <div class="ritual"><h3>Пятничный сбор</h3>
-    <p>В пятницу в 16:00 бот пишет каждому в личку: вот что закрыто, какие планы? Ответы попадают в слайды. В понедельник в 9:00 готовая презентация приходит админам.</p></div>
+  <div class="ritual"><h3>ИКН по понедельникам</h3>
+    <p>В 9:30 бот пишет каждому в личку: что закрыто, какие планы, цифра недели. В 10:30 напоминает тем, кто не ответил. В 11:00 собирает презентацию, Яна смотрит и передаёт Кристине.</p></div>
   <div class="s-cap">Черновик слайдов на сейчас</div>
-  ${slide('Сделано за неделю', `${fd(wkStart)} – ${fd(wkEnd)}`, done, true)}
-  ${slide('Планы на следующую', `${fd(nxStart)} – ${fd(nxEnd)}`, plans, false)}
+  ${slide('Сделано за неделю', `${fd(W0)} – ${fd(W1)}`, done, true)}
+  ${slide('Планы на следующую', `${fd(N0)} – ${fd(N1)}`, plans, false)}
   <button class="btn ink full" id="export" style="margin-top:6px">Собрать Google Слайды сейчас</button>
   <p class="hint">Соберётся новая презентация на твоём Google Диске: сделано, планы и Гант.</p>`;
 }
 
 function render() {
-  app.innerHTML = { team: vTeam, mine: vMine, gantt: vGantt, vac: vVac, status: vStatus }[view]();
+  app.innerHTML = { team: vTeam, mine: vMine, gantt: vGantt, vac: vVac, status: vStatus, person: vPerson }[view]();
 }
 
 /* ---------- загрузка ---------- */
@@ -394,6 +429,9 @@ app.addEventListener('click', async e => {
     else if (t.s === 'done') toast('Готово. Попадёт в пятничный статус');
     return;
   }
+  if (e.target.id === 'back') { view = 'team'; buzz(); render(); window.scrollTo(0, 0); return; }
+  const pv = e.target.closest('[data-person]');
+  if (pv) { personView = pv.dataset.person; view = 'person'; buzz(); render(); window.scrollTo(0, 0); return; }
   const va = e.target.closest('[data-abs]');
   if (va) { openAbs(va.dataset.abs); return; }
   if (e.target.id === 'addAbs') { openAbsForm(); return; }
@@ -579,10 +617,28 @@ function openTask(id) {
     <div class="parsed">
       <div><span>Кто</span>${esc(t.who)}</div>
       <div><span>Срок</span>${fd(t.due)}</div>
-      <div><span>Проект</span>${t.p ? esc(t.p) : 'без проекта'}</div>
       <div><span>Статус</span>${ST[t.s]}</div></div>
+    <div class="flabel">Проект</div>
+    <select id="tp"><option value="">без проекта</option>${[...new Set(S.projects.map(p => p.name))].map(n => `<option ${n === t.p ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+    <div class="flabel">На слайд</div>
+    <div class="chips" id="tsl">${[['', 'авто'], ['да', 'да'], ['нет', 'нет']].map(([v, l]) => `<button class="chip ${(t.slide || '') === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>
+    <p class="hint" id="slh" style="margin-top:-6px"></p>
     <p class="hint" id="derr" style="color:var(--hot)"></p>
     <div class="row" id="drow"><button class="btn ghost" id="del" style="color:var(--hot);border-color:var(--hot)">Удалить задачу</button></div>`);
+  const slh = () => { document.getElementById('slh').textContent = !t.slide ? (t.p ? 'Сейчас идёт на слайд: у задачи есть проект.' : 'Сейчас не идёт на слайд: у задачи нет проекта.') : (t.slide === 'да' ? 'Всегда на слайде.' : 'На слайды не выносится.'); };
+  slh();
+  document.getElementById('tp').onchange = async e => {
+    const v = e.target.value, old = t.p;
+    t.p = v; slh(); render(); buzz();
+    const r = await api({ a: 'project', id: t.id, p: v }).catch(() => ({ ok: false }));
+    if (!r.ok) { t.p = old; render(); document.getElementById('derr').textContent = 'Не сохранилось. Попробуй ещё раз.'; }
+  };
+  sheet.querySelectorAll('#tsl .chip').forEach(c => c.onclick = async () => {
+    const v = c.dataset.v, old = t.slide || '';
+    t.slide = v; sheet.querySelectorAll('#tsl .chip').forEach(x => x.classList.toggle('on', x === c)); slh(); render(); buzz();
+    const r = await api({ a: 'slide', id: t.id, v }).catch(() => ({ ok: false }));
+    if (!r.ok) { t.slide = old; render(); document.getElementById('derr').textContent = 'Не сохранилось. Попробуй ещё раз.'; }
+  });
   document.getElementById('del').onclick = () => {
     buzz('medium');
     document.getElementById('drow').innerHTML = `<button class="btn ghost" id="dno">Отмена</button><button class="btn" id="dyes" style="background:var(--hot);color:#0C0E11">Да, удалить</button>`;
