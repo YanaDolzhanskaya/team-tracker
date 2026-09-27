@@ -248,7 +248,7 @@ function vTeam() {
       <div><div class="p-name">${esc(p.name)}</div><div class="p-role">${esc(p.role)}</div>${awayBadge(p.name)}</div>
       <div class="p-count"><b>${open.length}</b>${burn ? `<span class="hot">горит ${burn}</span>` : 'в работе'}</div></div>`;
     open.slice(0, 3).forEach(t => {
-      h += `<div class="tline" data-open="${esc(t.id)}" style="cursor:pointer"><span>${esc(t.t)}</span><span class="d ${late(t) ? 'late' : ''}">${late(t) ? 'просрочено' : fd(t.due)}</span></div>`;
+      h += `<div class="tline" data-open="${esc(t.id)}" style="cursor:pointer"><span>${visIcon(t)}${esc(t.t)}</span><span class="d ${late(t) ? 'late' : ''}">${late(t) ? 'просрочено' : fd(t.due)}</span></div>`;
     });
     if (open.length > 3) h += `<div class="tline" data-person="${esc(p.name)}" style="color:var(--faint);cursor:pointer">и ещё ${open.length - 3} ›</div>`;
     if (!open.length) h += `<div class="tline" style="color:var(--faint)">Открытых задач нет</div>`;
@@ -259,7 +259,7 @@ function vTeam() {
 
 function taskCard(t) {
   return `<div class="task ${t.s === 'done' ? 'done' : ''}">
-    <div class="t-body" data-open="${esc(t.id)}" style="cursor:pointer"><div class="t-title">${esc(t.t)}</div>
+    <div class="t-body" data-open="${esc(t.id)}" style="cursor:pointer"><div class="t-title">${visIcon(t)}${esc(t.t)}</div>
     <div class="t-meta">${t.p ? `<span class="proj">${esc(t.p)}</span>` : ''}<span class="${late(t) ? 'late' : ''}">${late(t) ? 'просрочено, ' : 'до '}${fd(t.due)}</span></div></div>
     <button class="st ${t.s}" data-id="${esc(t.id)}" aria-label="Сменить статус">${ST[t.s]}</button></div>`;
 }
@@ -359,7 +359,7 @@ function vStatus() {
   const done = {}, plans = {};
   const push = (o, n, t) => (o[n] = o[n] || []).push(t);
   S.tasks.forEach(t => {
-    if (!onSlide(t)) return;
+    if (!onSlide(t) || t.v) return;
     if (t.s === 'done' && t.doneAt && t.doneAt >= W0 && t.doneAt <= W1) push(done, t.who, t.t);
     if (t.s !== 'done' && t.due && t.due <= N1) push(plans, t.who, t.t);
   });
@@ -460,14 +460,17 @@ document.getElementById('plus').onclick = () => {
     <textarea id="tin" rows="3" placeholder="Лена
 РК для ODO
 пятница"></textarea>
+    <div class="flabel">Кто видит</div>${visChips('avis', '')}
     <p class="hint" id="terr" style="color:var(--hot)"></p>
     <div class="row"><button class="btn lime" id="padd">Добавить</button></div>`);
   const btn = document.getElementById('padd');
+  let vis = '';
+  sheet.querySelectorAll('#avis .chip').forEach(c => c.onclick = () => { vis = c.dataset.v; sheet.querySelectorAll('#avis .chip').forEach(x => x.classList.toggle('on', x === c)); buzz(); });
   const add = async (force) => {
     const text = document.getElementById('tin').value.trim();
     if (!text) return;
     btn.disabled = true; btn.textContent = 'Записываю…';
-    const r = await api({ a: 'add', text, force: force ? 1 : 0 }).catch(() => ({ ok: false }));
+    const r = await api({ a: 'add', text, force: force ? 1 : 0, vis }).catch(() => ({ ok: false }));
     btn.disabled = false; btn.textContent = 'Добавить';
     if (r.ok) { buzz('medium'); closeSheet(); toast(`Записал: ${r.task.who}, до ${fd(kd(r.task.due))}`); load(true); }
     else if (r.error === 'similar') {
@@ -557,6 +560,14 @@ function vVac() {
   <p class="hint">Боту тоже можно написать: «отпуск 12–24.10», «дэйофф 9.10», «кто в отпуске?»</p>`;
 }
 
+const visIcon = t => t.v === 'только я' ? '<span title="Личная" style="margin-right:4px">🔒</span>' : t.v === 'руководитель' ? '<span title="Видно руководителю" style="margin-right:4px">👁</span>' : '';
+function visOptions() {
+  const lead = (S.leaders || []).filter(n => n !== S.me);
+  return [['', 'всем'], ...(lead.length ? [['руководитель', 'мне и ' + lead.join(', ')]] : []), ['только я', 'только мне']];
+}
+function visChips(id, cur) {
+  return `<div class="chips" id="${id}">${visOptions().map(([v, l]) => `<button class="chip ${(cur || '') === v ? 'on' : ''}" data-v="${v}">${esc(l)}</button>`).join('')}</div>`;
+}
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function openAbsForm() {
   buzz();
@@ -630,20 +641,45 @@ function openTask(id) {
   const t = S.tasks.find(x => String(x.id) === String(id));
   if (!t) return;
   buzz();
-  openSheet(`<h3>${esc(t.t)}</h3>
-    <div class="parsed">
-      <div><span>Кто</span>${esc(t.who)}</div>
-      <div><span>Срок</span>${fd(t.due)}</div>
-      <div><span>Статус</span>${ST[t.s]}</div></div>
+  openSheet(`<h3>Задача</h3>
+    <textarea id="et" rows="2">${esc(t.t)}</textarea>
+    <div class="dates"><div style="flex:1"><div class="flabel">Кто</div><select id="ew">${S.people.map(p => `<option ${p.name === t.who ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>
+    <div style="flex:1"><div class="flabel">Срок</div><input type="date" id="ed" value="${t.due ? iso(t.due) : ''}"></div></div>
+    <button class="btn lime full" id="esave" style="display:none;margin-top:12px">Сохранить изменения</button>
+    <div class="parsed" style="margin-top:12px"><div><span>Статус</span>${ST[t.s]}</div></div>
     <div class="flabel">Проект</div>
     <select id="tp"><option value="">без проекта</option>${[...new Set(S.projects.map(p => p.name))].map(n => `<option ${n === t.p ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+    <div class="flabel">Кто видит</div>
+    ${t.who === S.me || t.by === S.me ? visChips('tvis', t.v) : `<p class="hint" style="margin:0 0 12px">${t.v === 'только я' ? '🔒 Личная задача' : t.v === 'руководитель' ? '👁 Видят исполнитель, автор и руководитель' : 'Всем'}</p>`}
     <div class="flabel">На слайд</div>
     <div class="chips" id="tsl">${[['', 'авто'], ['да', 'да'], ['нет', 'нет']].map(([v, l]) => `<button class="chip ${(t.slide || '') === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>
     <p class="hint" id="slh" style="margin-top:-6px"></p>
     <p class="hint" id="derr" style="color:var(--hot)"></p>
     <div class="row" id="drow"><button class="btn ghost" id="del" style="color:var(--hot);border-color:var(--hot)">Удалить задачу</button></div>`);
 
-  const slh = () => { document.getElementById('slh').textContent = !t.slide ? (t.p ? 'Сейчас идёт на слайд: у задачи есть проект.' : 'Сейчас не идёт на слайд: у задачи нет проекта.') : (t.slide === 'да' ? 'Всегда на слайде.' : 'На слайды не выносится.'); };
+  const et = document.getElementById('et'), ew = document.getElementById('ew'), ed = document.getElementById('ed'), es = document.getElementById('esave');
+  const dirty = () => { es.style.display = (et.value.trim() !== t.t || ew.value !== t.who || ed.value !== (t.due ? iso(t.due) : '')) ? 'block' : 'none'; };
+  [et, ew, ed].forEach(x => x.oninput = x.onchange = dirty);
+  es.onclick = async () => {
+    const nt = et.value.trim();
+    if (!nt || !ed.value) { document.getElementById('derr').textContent = 'Нужны текст задачи и срок.'; return; }
+    es.disabled = true; es.textContent = 'Сохраняю…'; buzz();
+    const r = await api({ a: 'edit', id: t.id, t: nt, who: ew.value, due: ed.value }).catch(() => ({ ok: false }));
+    es.disabled = false; es.textContent = 'Сохранить изменения';
+    if (r.ok) {
+      const moved = ew.value !== t.who;
+      t.t = nt; t.who = ew.value; t.due = kd(ed.value);
+      buzz('medium'); closeSheet(); render(); toast(moved ? 'Сохранил, новому исполнителю ушло сообщение' : 'Сохранил');
+    } else document.getElementById('derr').textContent = r.error === 'forbidden'
+      ? 'Менять задачу может исполнитель, автор или админ.' : 'Не сохранилось. Попробуй ещё раз.';
+  };
+  sheet.querySelectorAll('#tvis .chip').forEach(c => c.onclick = async () => {
+    const v = c.dataset.v, old = t.v || '';
+    t.v = v; sheet.querySelectorAll('#tvis .chip').forEach(x => x.classList.toggle('on', x === c)); render(); slh(); buzz();
+    const r = await api({ a: 'vis', id: t.id, v }).catch(() => ({ ok: false }));
+    if (!r.ok) { t.v = old; render(); document.getElementById('derr').textContent = 'Не сохранилось. Попробуй ещё раз.'; }
+  });
+  const slh = () => { document.getElementById('slh').textContent = t.v ? 'Скрытые задачи на слайды не выносятся.' : !t.slide ? (t.p ? 'Сейчас идёт на слайд: у задачи есть проект.' : 'Сейчас не идёт на слайд: у задачи нет проекта.') : (t.slide === 'да' ? 'Всегда на слайде.' : 'На слайды не выносится.'); };
   slh();
   document.getElementById('tp').onchange = async e => {
     const v = e.target.value, old = t.p;
